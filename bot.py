@@ -33,6 +33,130 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 FREE_URL, ADV_ONBOARD, LOGO, WHATSAPP_UNBAN, WEBSITE_HISTORY, PROFILE_MENU = range(6)
+# ------------------ WELCOME NEW USERS ------------------
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for member in update.message.new_chat_members:
+        if member.is_bot:
+            continue
+        welcome_text = (
+            f"👋 Welcome [{member.first_name}](tg://user?id={member.id})!\n\n"
+            "You’ve joined one of the best communities 💎\n"
+            "Here you can learn, share, and grow with us 🚀\n\n"
+            "⚡ Be respectful, contribute positively, and enjoy your stay!\n\n"
+            "💡 *Made with ❤️ by MR DEV*\n"
+            "📞 Contact: [Click Here](https://t.me/Mrddev)"
+        )
+        await update.message.reply_text(
+            welcome_text,
+            parse_mode="Markdown"
+        )
+# ------------------ GOODBYE USERS ------------------
+async def goodbye_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.left_chat_member and not update.message.left_chat_member.is_bot:
+        member = update.message.left_chat_member
+        bye_text = (
+            f"😢 [{member.first_name}](tg://user?id={member.id}) has left the group.\n\n"
+            "We hope you enjoyed your time here and learned something useful ✨\n"
+            "Remember, you’re always welcome back! 🔄\n\n"
+            "💡 *Made with ❤️ by MR DEV*\n"
+            "📞 Contact: [Click Here](https://t.me/Mrddev)"
+        )
+        await update.message.reply_text(
+            bye_text,
+            parse_mode="Markdown"
+        )
+
+# ------------------ TAG ALL (Normal Ping) ------------------
+async def tag_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("❌ This command only works in groups.")
+        return
+
+    member = await context.bot.get_chat_member(chat.id, user.id)
+    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+        await update.message.reply_text("❌ Only admins can use this command.")
+        return
+
+    extra_text = " ".join(context.args) if context.args else "📢 Attention everyone!"
+    try:
+        count = await context.bot.get_chat_member_count(chat.id)
+        text_batch, batch_size = [], 30
+        sent = 0
+
+        for user_id in range(count):
+            try:
+                member = await context.bot.get_chat_member(chat.id, user_id)
+                u = member.user
+                if u.is_bot:
+                    continue
+                mention = f"@{u.username}" if u.username else f"[{u.first_name}](tg://user?id={u.id})"
+                text_batch.append(mention)
+
+                if len(text_batch) >= batch_size:
+                    text = f"{extra_text}\n\n" + " ".join(text_batch) + "\n\n💡 Made with ❤️ by MR DEV"
+                    await update.message.reply_text(text, parse_mode="Markdown")
+                    text_batch = []
+                    sent += 1
+            except Exception:
+                continue
+
+        if text_batch:
+            text = f"{extra_text}\n\n" + " ".join(text_batch) + "\n\n💡 Made with ❤️ by MR DEV"
+            await update.message.reply_text(text, parse_mode="Markdown")
+            sent += 1
+
+        await update.message.reply_text(f"✅ Tagged all in {sent} batch(es).")
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Failed to tag all: {e}")
+        
+# ------------------ TAG REPLY (Silent) ------------------
+async def tag_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+
+    # only works in groups
+    if chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("❌ This command only works in groups.")
+        return
+
+    # check if user is admin
+    member = await context.bot.get_chat_member(chat.id, user.id)
+    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+        await update.message.reply_text("❌ Only admins can use this command.")
+        return
+
+    # must be a reply
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ You must reply to a message with /tag.")
+        return
+
+    try:
+        count = await context.bot.get_chat_member_count(chat.id)
+        text_batch = []
+
+        for user_id in range(count):
+            try:
+                member = await context.bot.get_chat_member(chat.id, user_id)
+                u = member.user
+                if u.is_bot:
+                    continue
+                mention = f"@{u.username}" if u.username else f"[{u.first_name}](tg://user?id={u.id})"
+                text_batch.append(mention)
+            except Exception:
+                continue
+
+        if text_batch:
+            text = "🔔 " + " ".join(text_batch) + "\n\n💡 Made with ❤️ by MR DEV\n📞 Contact: [Click Here](https://t.me/Mrddev)"
+            await update.message.reply_to_message.reply_text(
+                text, parse_mode="Markdown", disable_notification=True
+            )
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Failed to tag reply: {e}")
 
 def main_menu(is_premium=False):
     keyboard = [
@@ -513,6 +637,10 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("admin", admin_cmd))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+    app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, goodbye_member))
+    app.add_handler(CommandHandler("tagall", tag_all))
+    app.add_handler(CommandHandler("tag", tag_reply))
     app.add_error_handler(error_handler)
     print("Bot running...")
     app.run_polling()
